@@ -4,6 +4,7 @@ subagent-notify hook - plays "job's done" only for long-running tasks (>10 min)
 gets start time from subagent's transcript (first entry timestamp)
 """
 import json
+import os
 import subprocess
 import sys
 import time

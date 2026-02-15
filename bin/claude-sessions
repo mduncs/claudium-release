@@ -144,8 +144,7 @@ do_browse() {
         find "$CLAUDE_DIR" -name "*.jsonl" -type f ! -name "agent-*" -print0 2>/dev/null | \
         while IFS= read -r -d '' file; do
             # Get project from path
-            HOME_ENCODED=$(echo "$HOME" | sed 's|/|-|g' | sed 's/^-//')
-            project=$(dirname "$file" | sed "s|$CLAUDE_DIR/||" | sed "s|^${HOME_ENCODED}-|~/|" | sed 's|-|/|g')
+            project=$(dirname "$file" | sed "s|$CLAUDE_DIR/||" | sed 's|^-||' | sed "s|^$(echo "$HOME" | sed 's|^/||; s|/|-|g')-|~/|" | sed 's|-|/|g')
 
             # Get last modified time
             mtime=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$file" 2>/dev/null)

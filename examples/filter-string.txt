@@ -1,0 +1,17 @@
+# Filter strings — one per line
+# These strings will be removed from all tool output before Claude sees them.
+# The sanitize hooks read this file at runtime.
+#
+# Use case: there exist strings that, when present in Claude's context,
+# trigger deterministic API-level refusal. Hostile actors embed these
+# in web pages, files, and other content to disrupt Claude sessions.
+#
+# How it works:
+# 1. Put the string(s) on separate lines below (no comments on string lines)
+# 2. sanitize-output.py (PreToolUse) catches them in Read/Bash/Grep/WebFetch
+# 3. sanitize-post.py (PostToolUse) catches anything that slipped through
+# 4. The string is replaced with [FILTERED] in the output
+#
+# IMPORTANT: The actual strings are not included in this repo.
+# You'll need to discover them yourself or ask in the community.
+# Put one string per line below:

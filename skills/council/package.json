@@ -1,0 +1,15 @@
+{
+  "name": "council",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "council": "bun run council.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

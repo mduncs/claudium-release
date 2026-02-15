@@ -1,0 +1,207 @@
+#!/usr/bin/env bun
+
+/**
+ * portctl - Port registry management for Claude sessions
+ *
+ * Usage:
+ *   portctl list                    # show all registered + active ports
+ *   portctl register 8850 myapp     # register a port
+ *   portctl claim 8850 [pid]        # mark port as active (current PID if not specified)
+ *   portctl release 8850            # mark port as inactive
+ *   portctl check 8850              # check if port is available
+ *   portctl next                    # suggest next available port in 8800-8899 range
+ *
+ * Note: Uses execSync with controlled inputs (port numbers only, not user strings)
+ */
+
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { execSync } from "child_process";
+import { homedir } from "os";
+import { join } from "path";
+
+const PORTS_FILE = join(homedir(), ".claude/ports.json");
+
+interface PortEntry {
+  project: string;
+  note?: string;
+  pid?: number;
+  started?: string;
+}
+
+interface PortsData {
+  registry: Record<string, PortEntry>;
+  active: Record<string, PortEntry>;
+  last_updated: string | null;
+}
+
+function loadPorts(): PortsData {
+  if (!existsSync(PORTS_FILE)) {
+    return { registry: {}, active: {}, last_updated: null };
+  }
+  return JSON.parse(readFileSync(PORTS_FILE, "utf-8"));
+}
+
+function savePorts(data: PortsData): void {
+  data.last_updated = new Date().toISOString();
+  writeFileSync(PORTS_FILE, JSON.stringify(data, null, 2));
+}
+
+function isPortListening(port: number): { listening: boolean; pid?: number; process?: string } {
+  // port is always a number from our code, safe to interpolate
+  if (port < 1 || port > 65535 || !Number.isInteger(port)) {
+    return { listening: false };
+  }
+  try {
+    const result = execSync(
+      `lsof -ti:${port} -sTCP:LISTEN 2>/dev/null`,
+      { encoding: "utf-8" }
+    ).trim();
+    if (result) {
+      const pid = parseInt(result.split("\n")[0]);
+      if (pid > 0) {
+        const procInfo = execSync(`ps -p ${pid} -o comm= 2>/dev/null`, { encoding: "utf-8" }).trim();
+        return { listening: true, pid, process: procInfo };
+      }
+    }
+  } catch {
+    // No process listening
+  }
+  return { listening: false };
+}
+
+function list(): void {
+  const data = loadPorts();
+
+  console.log("PORT   STATUS    PROJECT          NOTE");
+  console.log("----   ------    -------          ----");
+
+  const allPorts = new Set([
+    ...Object.keys(data.registry),
+    ...Object.keys(data.active),
+  ]);
+
+  const sorted = [...allPorts].map(Number).sort((a, b) => a - b);
+
+  for (const port of sorted) {
+    const reg = data.registry[port];
+    const active = data.active[port];
+    const live = isPortListening(port);
+
+    let status = "free";
+    let project = reg?.project || active?.project || "-";
+    let note = reg?.note || "";
+
+    if (live.listening) {
+      status = `\x1b[32mLIVE\x1b[0m`;
+      if (live.process) note = `pid:${live.pid} (${live.process})`;
+    } else if (project === "RESERVED") {
+      status = "\x1b[33mRSVD\x1b[0m";
+    }
+
+    console.log(
+      `${String(port).padEnd(6)} ${status.padEnd(18)} ${project.padEnd(16)} ${note}`
+    );
+  }
+}
+
+function register(port: string, project: string, note?: string): void {
+  const data = loadPorts();
+  data.registry[port] = { project, note: note || "" };
+  savePorts(data);
+  console.log(`Registered port ${port} for ${project}`);
+}
+
+function claim(port: string, pid?: string): void {
+  const data = loadPorts();
+  const actualPid = pid ? parseInt(pid) : process.ppid;
+  data.active[port] = {
+    project: data.registry[port]?.project || "unknown",
+    pid: actualPid,
+    started: new Date().toISOString(),
+  };
+  savePorts(data);
+  console.log(`Claimed port ${port} (pid: ${actualPid})`);
+}
+
+function release(port: string): void {
+  const data = loadPorts();
+  delete data.active[port];
+  savePorts(data);
+  console.log(`Released port ${port}`);
+}
+
+function check(port: string): void {
+  const data = loadPorts();
+  const portNum = parseInt(port);
+  const live = isPortListening(portNum);
+  const reg = data.registry[port];
+
+  if (live.listening) {
+    console.log(`Port ${port}: IN USE (pid: ${live.pid}, process: ${live.process})`);
+    process.exit(1);
+  } else if (reg?.project === "RESERVED") {
+    console.log(`Port ${port}: RESERVED for ${reg.note}`);
+    process.exit(1);
+  } else if (reg) {
+    console.log(`Port ${port}: registered for ${reg.project}, currently free`);
+    process.exit(0);
+  } else {
+    console.log(`Port ${port}: available`);
+    process.exit(0);
+  }
+}
+
+function next(): void {
+  const data = loadPorts();
+
+  for (let port = 8800; port < 8900; port++) {
+    const portStr = String(port);
+    const reg = data.registry[portStr];
+    const live = isPortListening(port);
+
+    if (!live.listening && !reg) {
+      console.log(port);
+      return;
+    }
+  }
+
+  console.error("No available ports in 8800-8899 range");
+  process.exit(1);
+}
+
+// CLI
+const [, , command, ...args] = process.argv;
+
+switch (command) {
+  case "list":
+  case undefined:
+    list();
+    break;
+  case "register":
+    register(args[0], args[1], args[2]);
+    break;
+  case "claim":
+    claim(args[0], args[1]);
+    break;
+  case "release":
+    release(args[0]);
+    break;
+  case "check":
+    check(args[0]);
+    break;
+  case "next":
+    next();
+    break;
+  default:
+    console.log(`
+portctl - Port registry for Claude sessions
+
+Usage:
+  portctl list                    # show all registered + active ports
+  portctl register 8850 myapp     # register a port
+  portctl claim 8850 [pid]        # mark port as active
+  portctl release 8850            # mark port as inactive
+  portctl check 8850              # check if port is available
+  portctl next                    # suggest next available port
+`);
+}

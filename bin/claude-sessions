@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+# claude-sessions - browse claude conversation history
+# Usage:
+#   claude-sessions              Browse and resume sessions
+#   claude-sessions --export     Export sessions from a project folder
+#
+# Browse Controls:
+#   ↑/↓       Navigate sessions
+#   Tab       Cycle: human → conversation → full
+#   Enter     Resume with clawd (skip perms)
+#   Ctrl-Y    Copy path to clipboard
+#   Ctrl-O    Open in $EDITOR
+#   Escape    Exit
+
+set -euo pipefail
+
+CLAUDE_DIR="${HOME}/.claude/projects"
+
+# ─────────────────────────────────────────────────────────────
+# Export mode
+# ─────────────────────────────────────────────────────────────
+do_export() {
+    local project_path="$1"
+
+    # resolve to absolute path
+    project_path=$(cd "$project_path" 2>/dev/null && pwd || echo "$project_path")
+
+    # encode path to match claude's folder naming
+    local encoded=$(echo "$project_path" | sed 's/\//-/g')
+    local sessions_dir="$CLAUDE_DIR/$encoded"
+
+    if [[ ! -d "$sessions_dir" ]]; then
+        echo "no sessions found for: $project_path"
+        echo "looked in: $sessions_dir"
+        exit 1
+    fi
+
+    # count sessions
+    local count=$(find "$sessions_dir" -name "*.jsonl" ! -name "agent-*" 2>/dev/null | wc -l | tr -d ' ')
+    echo "found $count session(s) in: $project_path"
+    echo ""
+
+    # prompt for export type
+    echo "export type:"
+    echo "  1) human only"
+    echo "  2) claude only"
+    echo "  3) both (conversation)"
+    echo ""
+    read -p "choice [1/2/3]: " -n 1 -r choice
+    echo ""
+
+    case "$choice" in
+        1) export_type="human" ;;
+        2) export_type="claude" ;;
+        3) export_type="both" ;;
+        *) echo "invalid choice"; exit 1 ;;
+    esac
+
+    # prompt for output location
+    local default_out="$HOME/exports/claude-sessions"
+    read -p "output dir [$default_out]: " -r out_dir
+    out_dir="${out_dir:-$default_out}"
+
+    mkdir -p "$out_dir"
+
+    # export each session
+    local exported=0
+    for f in "$sessions_dir"/*.jsonl; do
+        [[ -f "$f" ]] || continue
+        [[ "$(basename "$f")" == agent-* ]] && continue
+
+        local name=$(basename "$f" .jsonl)
+        local outfile="$out_dir/${name}.txt"
+
+        # write header
+        {
+            echo "════════════════════════════════════════════════════════════"
+            echo "  Session: $name"
+            echo "  Project: $project_path"
+            echo "  Exported: $(date '+%Y-%m-%d %H:%M')"
+            echo "════════════════════════════════════════════════════════════"
+            echo ""
+        } > "$outfile"
+
+        case "$export_type" in
+            human)
+                jq -r 'select(.type == "user") | .message.content |
+                    if type == "array" then
+                        ([.[] | if type == "object" then .text // empty else . end] | join("\n"))
+                    else . end' "$f" 2>/dev/null | \
+                    awk 'NF {print; print ""}' >> "$outfile"
+                ;;
+            claude)
+                jq -r 'select(.type == "assistant") | .message.content |
+                    if type == "array" then
+                        ([.[] | if type == "object" then .text // empty else . end] | join("\n"))
+                    else . end' "$f" 2>/dev/null | \
+                    awk 'NF {print; print ""}' >> "$outfile"
+                ;;
+            both)
+                jq -r '
+                    if .type == "user" then
+                        "\n────────────────────────────────────────\n👤 HUMAN\n────────────────────────────────────────\n" + (
+                            .message.content |
+                            if type == "array" then
+                                ([.[] | if type == "object" then .text // empty else . end] | join("\n"))
+                            else . end
+                        )
+                    elif .type == "assistant" then
+                        "\n────────────────────────────────────────\n🤖 CLAUDE\n────────────────────────────────────────\n" + (
+                            .message.content |
+                            if type == "array" then
+                                ([.[] | if type == "object" then .text // empty else . end] | join("\n"))
+                            else . end
+                        )
+                    else empty end
+                ' "$f" 2>/dev/null >> "$outfile"
+                ;;
+        esac
+
+        # remove empty files
+        if [[ ! -s "$outfile" ]]; then
+            rm -f "$outfile"
+        else
+            ((exported++))
+        fi
+    done
+
+    echo ""
+    echo "exported $exported session(s) to: $out_dir"
+    ls -la "$out_dir"
+}
+
+# ─────────────────────────────────────────────────────────────
+# Browse mode (original functionality)
+# ─────────────────────────────────────────────────────────────
+do_browse() {
+    MODE_FILE="/tmp/claude-sessions-mode.$$"
+    trap 'rm -f "$MODE_FILE"' EXIT
+    echo "human" > "$MODE_FILE"
+
+    # List all sessions with metadata
+    list_sessions() {
+        find "$CLAUDE_DIR" -name "*.jsonl" -type f ! -name "agent-*" -print0 2>/dev/null | \
+        while IFS= read -r -d '' file; do
+            # Get project from path
+            HOME_ENCODED=$(echo "$HOME" | sed 's|/|-|g' | sed 's/^-//')
+            project=$(dirname "$file" | sed "s|$CLAUDE_DIR/||" | sed "s|^${HOME_ENCODED}-|~/|" | sed 's|-|/|g')
+
+            # Get last modified time
+            mtime=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$file" 2>/dev/null)
+
+            # Get first human message as preview (skip tool results)
+            first_msg=$(jq -r 'select(.type == "user") | .message.content |
+                if type == "array" then (.[0].text // empty) else . end' "$file" 2>/dev/null | \
+                grep -v '^$' | head -1 | cut -c1-50 | tr '\n' ' ')
+
+            if [[ -n "$first_msg" ]]; then
+                printf "%s\t%s\t%s...\t%s\n" "$mtime" "$project" "$first_msg" "$file"
+            fi
+        done | sort -rk1,2
+    }
+
+    export MODE_FILE
+
+    selected=$(list_sessions | \
+        fzf --ansi \
+            --delimiter=$'\t' \
+            --with-nth=1,2,3 \
+            --preview='claude-sessions-preview {4} $(cat '"$MODE_FILE"')' \
+            --preview-window=right:55%:wrap \
+            --bind='tab:execute-silent(m=$(cat '"$MODE_FILE"'); case $m in human) echo conversation;; conversation) echo full;; *) echo human;; esac > '"$MODE_FILE"')+refresh-preview' \
+            --bind='ctrl-o:execute(${EDITOR:-vim} {4})' \
+            --bind='ctrl-y:execute-silent(echo -n {4} | pbcopy)+abort' \
+            --header=$'Tab: cycle view │ Enter: resume │ ^Y: copy │ ^O: edit' \
+            --header-first \
+            --height=90% \
+            --layout=reverse \
+            --border=rounded \
+            --info=inline \
+        || true)
+
+    if [[ -n "$selected" ]]; then
+        path=$(echo "$selected" | cut -f4)
+        # extract session ID (filename without .jsonl)
+        session_id=$(basename "$path" .jsonl)
+
+        # extract original project dir from path
+        # e.g., -Users-you-code -> /Users/you/code
+        project_folder=$(dirname "$path" | xargs basename)
+        project_dir=$(echo "$project_folder" | sed 's/^-/\//' | sed 's/-/\//g')
+
+        if [[ -d "$project_dir" ]]; then
+            cd "$project_dir"
+            exec claude --dangerously-skip-permissions --resume "$session_id"
+        else
+            # original dir gone - offer to import to current dir
+            echo "original dir gone: $project_dir"
+            echo ""
+            read -p "import session to $(pwd)? [y/N] " -n 1 -r
+            echo ""
+
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                # encode current dir as claude project folder
+                current_encoded=$(pwd | sed 's/\//-/g')
+                current_project_dir="$CLAUDE_DIR/$current_encoded"
+                mkdir -p "$current_project_dir"
+
+                # copy session file (no modifications - preserve message chain)
+                cp "$path" "$current_project_dir/"
+
+                echo "imported from: $project_dir"
+                echo "resuming..."
+                exec claude --dangerously-skip-permissions --resume "$session_id"
+            else
+                echo "cancelled"
+                exit 0
+            fi
+        fi
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────
+case "${1:-}" in
+    --export|-e)
+        if [[ -z "${2:-}" ]]; then
+            echo "usage: claude-sessions --export /path/to/project"
+            exit 1
+        fi
+        do_export "$2"
+        ;;
+    --help|-h)
+        echo "claude-sessions - browse and export claude conversation history"
+        echo ""
+        echo "usage:"
+        echo "  claude-sessions              browse sessions interactively"
+        echo "  claude-sessions --export /path   export sessions from project folder"
+        echo ""
+        echo "export prompts for:"
+        echo "  - export type (human only, claude only, both)"
+        echo "  - output directory"
+        ;;
+    "")
+        do_browse
+        ;;
+    *)
+        echo "unknown option: $1"
+        echo "use --help for usage"
+        exit 1
+        ;;
+esac

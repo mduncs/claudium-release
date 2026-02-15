@@ -1,0 +1,62 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          "~/.claude/hooks/safety-guard.py",
+          "~/.claude/hooks/npm-to-bun.py"
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          "~/.claude/hooks/sanitize-output.py"
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          "~/.claude/hooks/audit-log.py",
+          "~/.claude/hooks/sanitize-post.py"
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          "~/.claude/hooks/vibe-check.py",
+          "~/.claude/hooks/tmux-notify.py",
+          "~/.claude/hooks/due-diligence.sh"
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          "~/.claude/hooks/ask-me-detector.py"
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          "~/.claude/hooks/subagent-notify.py"
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          "~/.claude/hooks/capture-session-id.sh"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Preview helper for claude-sessions
+# Usage: claude-sessions-preview <session-file> [mode]
+
+set -euo pipefail
+
+file="$1"
+mode="${2:-human}"
+
+if [[ ! -f "$file" ]]; then
+    echo "File not found: $file"
+    exit 1
+fi
+
+case "$mode" in
+    human)
+        echo "═══ LAST 5 HUMAN MESSAGES ═══"
+        echo ""
+        jq -r 'select(.type == "user") | .message.content | if type == "array" then (.[0].text // empty) else . end' "$file" 2>/dev/null | \
+            grep -v '^$' | tail -5 | nl -w2 -s'. '
+        ;;
+    conversation)
+        echo "═══ CONVERSATION (recent) ═══"
+        echo ""
+        jq -r '
+            if .type == "user" then
+                .message.content | if type == "array" then (.[0].text // "[tool result]") else . end | "👤 " + (.[0:80] | gsub("\n"; " "))
+            elif .type == "assistant" then
+                .message.content[]? | select(.type == "text") | .text | "🤖 " + (.[0:80] | gsub("\n"; " "))
+            else empty end
+        ' "$file" 2>/dev/null | tail -25
+        ;;
+    full)
+        echo "═══ ALL HUMAN MESSAGES ═══"
+        echo ""
+        jq -r 'select(.type == "user") | .message.content | if type == "array" then (.[0].text // empty) else . end' "$file" 2>/dev/null | \
+            grep -v '^$' | tail -20
+        ;;
+esac

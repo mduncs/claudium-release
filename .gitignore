@@ -1,0 +1,4 @@
+*.DS_Store
+node_modules/
+.dashboard-state.json
+*.jsonl

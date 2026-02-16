@@ -5,6 +5,8 @@ description: Build feature specifications iteratively with visual feedback, auto
 
 # /spec - Feature Specification Pipeline
 
+> **!tokenburner** — iterative spec building with 6-reviewer QA gauntlet. expect high token usage.
+
 Build specs through conversation, generate comprehensive markdown, run triple QA.
 
 ## Invocation

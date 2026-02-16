@@ -1,5 +1,7 @@
 # /ship - Release Review (patio11-style)
 
+> **!tokenburner** — 10-lens review with deep codebase reads per lens. expect high token usage.
+
 Invoke with: `/ship` or `/ship --quick` or `/ship --lens <name>` or `/ship --full`
 
 ## What This Is

@@ -1,5 +1,7 @@
 # /diligence - Verified Task Completion
 
+> **!tokenburner** — runs exhaustive verification on every subtask. expect high token usage.
+
 Invoke with: `/diligence <tasks>`
 
 ## Stub Mode (opt-in only)

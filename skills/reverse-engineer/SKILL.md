@@ -5,6 +5,8 @@ description: Reverse engineer any desktop application. Auto-detects app type (na
 
 # /reverse-engineer - Application Reverse Engineering Pipeline
 
+> **!tokenburner** — deep multi-layer analysis with tool calls at every depth. expect high token usage.
+
 Comprehensive RE pipeline that adapts to what it finds. Takes a path to an app, figures out what it's made of, and produces documentation at every useful depth.
 
 ## Invocation

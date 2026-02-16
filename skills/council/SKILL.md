@@ -5,6 +5,8 @@ description: Convene a council of reviewers (GPT-5.2, Gemini 3 Pro, or test with
 
 # Council - Multi-Model Design Review
 
+> **!tokenburner** — this skill dispatches multiple subagents and external model calls. expect high token usage.
+
 ## When to Use
 
 Call `/council` when you have:

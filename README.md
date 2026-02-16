@@ -33,15 +33,15 @@ slash-command definitions. copy to `~/.claude/skills/`.
 |-------|-------------|
 | archaeology | mines session for patterns, repeated requests, unfinished business |
 | background | automated GUI testing without stealing focus (macOS) |
-| council | multi-model design review (GPT-5.2, Gemini 3 Pro, Opus) |
-| diligence | verified task completion — every subtask needs evidence |
+| council | multi-model design review (GPT-5.2, Gemini 3 Pro, Opus) `!tokenburner` |
+| diligence | verified task completion — every subtask needs evidence `!tokenburner` |
 | history | view session messages lost to context compaction |
 | learnings | capture solutions and patterns into searchable knowledge base |
 | prompt-engineer | prompt refinement workflow |
 | quote | save notable prompts to JSONL log |
-| reverse-engineer | RE workflow for desktop apps (Ghidra MCP, asar, etc.) |
-| ship | release readiness review — 10 lenses, patio11-style |
-| spec | interactive spec builder with dashboard and 6-reviewer QA gauntlet |
+| reverse-engineer | RE workflow for desktop apps (Ghidra MCP, asar, etc.) `!tokenburner` |
+| ship | release readiness review — 10 lenses, patio11-style `!tokenburner` |
+| spec | interactive spec builder with dashboard and 6-reviewer QA gauntlet `!tokenburner` |
 | stuck | resumable handoff doc for when you're going in circles |
 | tabfs-browser-access | browser tabs as filesystem (requires TabFS) |
 | testing | automated UI testing patterns (AppleScript, TabFS, Playwright) |

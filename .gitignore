@@ -3,3 +3,4 @@ node_modules/
 .dashboard-state.json
 *.jsonl
 __pycache__/
+bun.lock
